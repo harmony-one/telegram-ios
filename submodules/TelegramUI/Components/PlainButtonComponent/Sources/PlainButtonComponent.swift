@@ -1,0 +1,223 @@
+import Foundation
+import UIKit
+import Display
+import ComponentFlow
+
+public final class PlainButtonComponent: Component {
+    public enum EffectAlignment {
+        case left
+        case right
+        case center
+    }
+    
+    public let content: AnyComponent<Empty>
+    public let effectAlignment: EffectAlignment
+    public let minSize: CGSize?
+    public let contentInsets: UIEdgeInsets
+    public let action: () -> Void
+    public let isEnabled: Bool
+    public let animateAlpha: Bool
+    public let tag: AnyObject?
+    
+    public init(
+        content: AnyComponent<Empty>,
+        effectAlignment: EffectAlignment,
+        minSize: CGSize? = nil,
+        contentInsets: UIEdgeInsets = UIEdgeInsets(),
+        action: @escaping () -> Void,
+        isEnabled: Bool = true,
+        animateAlpha: Bool = true,
+        tag : AnyObject? = nil
+    ) {
+        self.content = content
+        self.effectAlignment = effectAlignment
+        self.minSize = minSize
+        self.contentInsets = contentInsets
+        self.action = action
+        self.isEnabled = isEnabled
+        self.animateAlpha = animateAlpha
+        self.tag = tag
+    }
+    
+    public static func ==(lhs: PlainButtonComponent, rhs: PlainButtonComponent) -> Bool {
+        if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.effectAlignment != rhs.effectAlignment {
+            return false
+        }
+        if lhs.minSize != rhs.minSize {
+            return false
+        }
+        if lhs.contentInsets != rhs.contentInsets {
+            return false
+        }
+        if lhs.isEnabled != rhs.isEnabled {
+            return false
+        }
+        if lhs.animateAlpha != rhs.animateAlpha {
+            return false
+        }
+        if lhs.tag !== rhs.tag {
+            return false
+        }
+        return true
+    }
+
+    public final class View: HighlightTrackingButton, ComponentTaggedView {
+        public func matches(tag: Any) -> Bool {
+            if let component = self.component, let componentTag = component.tag {
+                let tag = tag as AnyObject
+                if componentTag === tag {
+                    return true
+                }
+            }
+            return false
+        }
+        
+        private var component: PlainButtonComponent?
+        private weak var componentState: EmptyComponentState?
+
+        private let contentContainer = UIView()
+        private let content = ComponentView<Empty>()
+        
+        public var contentView: UIView? {
+            return self.content.view
+        }
+        
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            
+            self.isExclusiveTouch = true
+            
+            self.contentContainer.isUserInteractionEnabled = false
+            self.addSubview(self.contentContainer)
+            
+            self.addTarget(self, action: #selector(self.pressed), for: .touchUpInside)
+            
+            self.highligthedChanged = { [weak self] highlighted in
+                if let self, self.bounds.width > 0.0 {
+                    let animateAlpha = self.component?.animateAlpha ?? true
+                    
+                    let topScale: CGFloat = (self.bounds.width - 8.0) / self.bounds.width
+                    let maxScale: CGFloat = (self.bounds.width + 2.0) / self.bounds.width
+                    
+                    if highlighted {
+                        self.contentContainer.layer.removeAnimation(forKey: "opacity")
+                        self.contentContainer.layer.removeAnimation(forKey: "sublayerTransform")
+                        
+                        if animateAlpha {
+                            self.contentContainer.alpha = 0.7
+                        }
+                        let transition = Transition(animation: .curve(duration: 0.2, curve: .easeInOut))
+                        transition.setScale(layer: self.contentContainer.layer, scale: topScale)
+                    } else {
+                        if animateAlpha {
+                            self.contentContainer.alpha = 1.0
+                            self.contentContainer.layer.animateAlpha(from: 0.7, to: 1.0, duration: 0.2)
+                        }
+                        
+                        let transition = Transition(animation: .none)
+                        transition.setScale(layer: self.contentContainer.layer, scale: 1.0)
+                        
+                        self.contentContainer.layer.animateScale(from: topScale, to: maxScale, duration: 0.13, timingFunction: CAMediaTimingFunctionName.easeOut.rawValue, removeOnCompletion: false, completion: { [weak self] _ in
+                            guard let self else {
+                                return
+                            }
+                            
+                            self.contentContainer.layer.animateScale(from: maxScale, to: 1.0, duration: 0.1, timingFunction: CAMediaTimingFunctionName.easeIn.rawValue)
+                        })
+                    }
+                }
+            }
+        }
+
+        required init(coder: NSCoder) {
+            preconditionFailure()
+        }
+        
+        @objc private func pressed() {
+            guard let component = self.component else {
+                return
+            }
+            component.action()
+        }
+        
+        override public func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+            let result = super.hitTest(point, with: event)
+            if result != nil {
+                return result
+            }
+            
+            if !self.isEnabled {
+                return nil
+            }
+            
+            if self.bounds.insetBy(dx: -8.0, dy: -8.0).contains(point) {
+                return self
+            }
+            
+            return nil
+        }
+
+        func update(component: PlainButtonComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+            self.component = component
+            self.componentState = state
+            
+            self.isEnabled = component.isEnabled
+            
+            let contentAlpha: CGFloat = 1.0
+
+            let contentSize = self.content.update(
+                transition: transition,
+                component: component.content,
+                environment: {},
+                containerSize: availableSize
+            )
+
+            var size = contentSize
+            if let minSize = component.minSize {
+                size.width = max(size.width, minSize.width)
+                size.height = max(size.height, minSize.height)
+            }
+            size.width += component.contentInsets.left + component.contentInsets.right
+            size.height += component.contentInsets.top + component.contentInsets.bottom
+
+            if let contentView = self.content.view {
+                var contentTransition = transition
+                if contentView.superview == nil {
+                    contentTransition = .immediate
+                    contentView.isUserInteractionEnabled = false
+                    self.contentContainer.addSubview(contentView)
+                }
+                let contentFrame = CGRect(origin: CGPoint(x: component.contentInsets.left + floor((size.width - component.contentInsets.left - component.contentInsets.right - contentSize.width) * 0.5), y: component.contentInsets.top + floor((size.height - component.contentInsets.top - component.contentInsets.bottom - contentSize.height) * 0.5)), size: contentSize)
+                
+                contentTransition.setFrame(view: contentView, frame: contentFrame)
+                contentTransition.setAlpha(view: contentView, alpha: contentAlpha)
+            }
+            
+            let anchorX: CGFloat
+            switch component.effectAlignment {
+            case .left:
+                anchorX = 0.0
+            case .center:
+                anchorX = 0.5
+            case .right:
+                anchorX = 1.0
+            }
+            self.contentContainer.layer.anchorPoint = CGPoint(x: anchorX, y: 0.5)
+            transition.setBounds(view: self.contentContainer, bounds: CGRect(origin: CGPoint(), size: size))
+            transition.setPosition(view: self.contentContainer, position: CGPoint(x: size.width * anchorX, y: size.height * 0.5))
+            
+            return size
+        }
+    }
+
+    public func makeView() -> View {
+        return View(frame: CGRect())
+    }
+
+    public func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: Transition) -> CGSize {
+        return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition)
+    }
+}
