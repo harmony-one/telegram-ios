@@ -28,13 +28,13 @@ buck-out/*
 .buckd/*
 tools/buck
 tools/bazel
-AppBinary.xcworkspace/*
-Project.xcodeproj/*
-Watch/Watch.xcodeproj/*
-AppBundle.xcworkspace/*
-*.xcworkspace
-*.xcodeproj
-!*_Xcode.xcodeproj
+# AppBinary.xcworkspace/*
+# Project.xcodeproj/*
+# Watch/Watch.xcodeproj/*
+# AppBundle.xcworkspace/*
+#*.xcworkspace
+#*.xcodeproj
+#!*_Xcode.xcodeproj
 .idea
 */.idea/*
 submodules/MtProtoKit/TON/macOS/lib/libtonlibjson.0.5.dylib
